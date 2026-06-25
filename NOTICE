@@ -1,0 +1,13 @@
+pyfortisiem
+
+This is an independent, community-maintained Python client for the FortiSIEM
+REST and MCP APIs. It is NOT affiliated with, authorized, maintained,
+sponsored, or endorsed by Fortinet, Inc. or any of its affiliates or
+subsidiaries.
+
+"Fortinet" and "FortiSIEM" are trademarks of Fortinet, Inc. They are used here
+only to describe what this software interoperates with, not to claim any
+association with or endorsement by Fortinet.
+
+Use against any FortiSIEM deployment is subject to that deployment's own terms
+and your authorization to access it.

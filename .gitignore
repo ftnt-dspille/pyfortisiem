@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+src/pyfortisiem/_version.py
+
+# venv
+.venv/
+venv/
+env/
+
+# tooling
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store
