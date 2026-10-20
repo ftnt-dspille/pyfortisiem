@@ -9,6 +9,7 @@ Each ``*Query``/``*Update`` model is the object a tool expects inside its single
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -453,3 +454,91 @@ def parse_risk_ranking(payload: dict) -> list[RiskEntry]:
             score = None
         out.append(RiskEntry.model_validate({"name": name, "score": score, **body}))
     return sorted(out, key=lambda e: (e.score is None, -(e.score or 0)))
+
+
+# --------------------------------------------------------------------------- #
+# System: license + health
+# --------------------------------------------------------------------------- #
+
+
+def _ms_to_dt(ms: int | None) -> datetime | None:
+    """FortiSIEM epoch-millisecond timestamp -> aware UTC datetime; 0/None -> None."""
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc) if ms else None
+
+
+class LicenseFeature(_RawModel):
+    """One row of ADMIN -> License -> General (``licenseInfo[]``).
+
+    ``usage`` is what the GUI prints in its expiry column: a date string
+    (``"Jan 23,2027"``), ``"Perpetual"`` or ``"N/A"``.
+    """
+
+    resource_name: str = Field(alias="resourceName")
+    licensed: str | None = None
+    usage: str | None = None
+    warn: bool = False
+
+
+class LicenseInfo(_RawModel):
+    """The supervisor's license, as ADMIN -> License shows it (h5 ``sec/license``).
+
+    Only the fields worth typing are declared; the rest (worker list, per-feature
+    end times) stay reachable through ``.raw``.
+    """
+
+    serial: str | None = Field(default=None, alias="sn")
+    uuid: str | None = None
+    type: str | None = None  # "Enterprise", "Service Provider", ...
+    eps_licensed: int | None = Field(default=None, alias="epsLicensed")
+    devices_licensed: int | None = Field(default=None, alias="configItemsLicensed")
+    collectors_licensed: int | None = Field(default=None, alias="noOfCollectors")
+    license_end_ms: int | None = Field(default=None, alias="licenseEndTime")
+    support_end_ms: int | None = Field(default=None, alias="supportEndTime")
+    features: list[LicenseFeature] = Field(default_factory=list, alias="licenseInfo")
+
+    @property
+    def license_end(self) -> datetime | None:
+        """None when the license has no end time (perpetual or not reported)."""
+        return _ms_to_dt(self.license_end_ms)
+
+    @property
+    def support_end(self) -> datetime | None:
+        return _ms_to_dt(self.support_end_ms)
+
+    def days_left(self, now: datetime | None = None) -> int | None:
+        end = self.license_end
+        if end is None:
+            return None
+        return (end - (now or datetime.now(timezone.utc))).days
+
+    def is_valid(self, now: datetime | None = None) -> bool:
+        """A serial is present and the license has not ended. Fails closed: no
+        serial is unlicensed, whatever the other fields say."""
+        if not self.serial:
+            return False
+        end = self.license_end
+        return end is None or end > (now or datetime.now(timezone.utc))
+
+    @property
+    def warnings(self) -> list[str]:
+        """Feature rows the GUI flags with a warning (about to expire / expired)."""
+        return [f.resource_name for f in self.features if f.warn]
+
+
+class HealthNode(_RawModel):
+    name: str
+    node_type: str | None = Field(default=None, alias="nodeType")
+    status: str | None = None
+    reason: list = Field(default_factory=list)
+
+
+class HealthOrg(_RawModel):
+    """One organization from ``/phoenix/rest/system/health/summary``."""
+
+    name: str
+    health_status: str | None = Field(default=None, alias="healthStatus")
+    nodes: list[HealthNode] = Field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return self.health_status == "Normal" and all(n.status == "Normal" for n in self.nodes)

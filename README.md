@@ -40,6 +40,17 @@ async def main():
 asyncio.run(main())
 ```
 
+## License + health
+
+```python
+from pyfortisiem import FortiSIEMClient
+
+with FortiSIEMClient("fortisiem.example.com:443", "admin", "pw") as c:
+    lic = c.license_info()              # h5 session, logs in on first use
+    print(lic.serial, lic.type, lic.license_end, lic.days_left(), lic.is_valid())
+    print([(o.name, o.ok) for o in c.health_summary()])   # supervisor + collectors
+```
+
 ## Auth modes
 
 | Mode | How | Use for |

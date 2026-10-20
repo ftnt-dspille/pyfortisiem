@@ -1,0 +1,164 @@
+{
+ "sec_license": {
+  "sn": "FSMS01TM00000000",
+  "uuid": "00000000-0000-4000-8000-000000000000",
+  "fipsMode": "Disabled",
+  "isSaasMode": false,
+  "spMode": false,
+  "licenseType": 1,
+  "noOfWorkers": 0,
+  "epsLicensed": 15000,
+  "epsUsage": 0,
+  "configItemsLicensed": 1500,
+  "endpointLicensed": 0,
+  "configItemsUsage": 0,
+  "diskLicensed": 250000000,
+  "diskUsage": 0,
+  "licenseStartTime": 0,
+  "licenseEndTime": 1800691200000,
+  "supportEndTime": 1800691200000,
+  "iocEndTime": 1800691200000,
+  "eps2EndTime": 2528477537000,
+  "installedTime": 0,
+  "eps2": 0,
+  "orgNumLicensed": 0,
+  "orgNumUsage": 0,
+  "noOfCollectors": 1000,
+  "basicAgentLicensed": 100,
+  "advancedAgentLicensed": 100,
+  "dssLicensed": false,
+  "salesforceCrm": false,
+  "waStartTime": 0,
+  "waEndTime": 1800691200000,
+  "awaEndTime": 1800691200000,
+  "epdEndTime": 2528477537000,
+  "dssStartTime": 0,
+  "dssEndTime": 1800691200000,
+  "beaconingStartTime": 0,
+  "beaconingEndTime": 1800691200000,
+  "rptSvrNumLicensed": 1,
+  "rptSvrNumUsage": 0,
+  "custName": "Super",
+  "type": "Enterprise",
+  "contactName": "",
+  "country": null,
+  "beaconingService": "1",
+  "fsmClusterLicensed": 0,
+  "fsmClusterStartTime": 0,
+  "fsmClusterEndTime": 0,
+  "licenseInfo": [
+   {
+    "custId": 0,
+    "customerName": null,
+    "resourceName": "Devices",
+    "licensed": "1500",
+    "usage": "Jan 23,2027",
+    "usageTime": 0,
+    "warn": false,
+    "usedCount": null
+   },
+   {
+    "custId": 0,
+    "customerName": null,
+    "resourceName": "Total EPS",
+    "licensed": "15000",
+    "usage": "Perpetual",
+    "usageTime": 0,
+    "warn": false,
+    "usedCount": null
+   },
+   {
+    "custId": 0,
+    "customerName": null,
+    "resourceName": "Host Collectors",
+    "licensed": "200",
+    "usage": "Jan 23,2027",
+    "usageTime": 0,
+    "warn": false,
+    "usedCount": null
+   },
+   {
+    "custId": 0,
+    "customerName": null,
+    "resourceName": "UEBA",
+    "licensed": "500",
+    "usage": "Jan 23,2027",
+    "usageTime": 0,
+    "warn": false,
+    "usedCount": null
+   },
+   {
+    "custId": 0,
+    "customerName": null,
+    "resourceName": "IOC Service",
+    "licensed": "Valid",
+    "usage": "Jan 23,2027",
+    "usageTime": 0,
+    "warn": false,
+    "usedCount": null
+   },
+   {
+    "custId": 0,
+    "customerName": null,
+    "resourceName": "Maintenance and Support",
+    "licensed": "Valid",
+    "usage": "Jan 23,2027",
+    "usageTime": 0,
+    "warn": false,
+    "usedCount": null
+   },
+   {
+    "custId": 0,
+    "customerName": null,
+    "resourceName": "High Availability Service",
+    "licensed": "Valid",
+    "usage": "Jan 23,2027",
+    "usageTime": 0,
+    "warn": false,
+    "usedCount": null
+   },
+   {
+    "custId": 0,
+    "customerName": null,
+    "resourceName": "Automation Service",
+    "licensed": "N/A",
+    "usage": "N/A",
+    "usageTime": 0,
+    "warn": false,
+    "usedCount": null
+   }
+  ],
+  "reporterList": [],
+  "role": null,
+  "primarySuperUUID": "00000000-0000-4000-8000-000000000000",
+  "haEndTime": 1800691200000,
+  "storageGBPerDay": 0,
+  "secondarySetting": null,
+  "concurrentPlaybookExecution": 0,
+  "concurrentPbExecEnd": 0,
+  "finsagentLicensed": 500,
+  "finsendTime": 1800691200000,
+  "saasMode": false
+ },
+ "health_summary": [
+  {
+   "id": 1,
+   "name": "Super",
+   "healthStatus": "Normal",
+   "nodes": [
+    {
+     "name": "supervisor",
+     "nodeType": "Super",
+     "status": "Normal",
+     "reason": []
+    },
+    {
+     "name": "collector",
+     "nodeType": "Collector",
+     "status": "Normal",
+     "reason": []
+    }
+   ]
+  }
+ ]
+}

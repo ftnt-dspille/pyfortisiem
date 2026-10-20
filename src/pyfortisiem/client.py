@@ -47,6 +47,7 @@ from .models import (
     EntityIncidentQuery,
     EntityReputationQuery,
     EventTable,
+    HealthOrg,
     Incident,
     IncidentDetailResult,
     IncidentId,
@@ -54,6 +55,7 @@ from .models import (
     IncidentSummary,
     IncidentUpdate,
     IocEntry,
+    LicenseInfo,
     McpTool,
     MutationAck,
     OAuthCredential,
@@ -159,6 +161,13 @@ class FortiSIEMClient:
             r = self._client.get(url, auth=(self._basic_user, self.password))
         return r.status_code
 
+    def health_summary(self) -> list[HealthOrg]:
+        """Per-organization health with each node's (supervisor, workers,
+        collectors) status - the body behind :meth:`health`."""
+        r = self.rest_get("system/health/summary")
+        r.raise_for_status()
+        return [HealthOrg.model_validate(o) for o in r.json()]
+
     # ---- flow #2: session auth (h5) + credential management ----------------
 
     def login(self) -> FortiSIEMClient:
@@ -203,6 +212,18 @@ class FortiSIEMClient:
         return self._session.request(
             method, url, headers=headers, json=json, params={"t": int(time.time() * 1000)}
         )
+
+    def license_info(self) -> LicenseInfo:
+        """The supervisor license, as ADMIN -> License shows it (h5 ``sec/license``).
+
+        The public REST ``system/license`` answers 403 even to the super-global
+        admin, so this goes through the GUI session; it logs in on first use.
+        """
+        if self._session is None:
+            self.login()
+        r = self._h5("GET", "sec/license")
+        r.raise_for_status()
+        return LicenseInfo.model_validate(r.json())
 
     def list_oauth_credentials(self) -> list[dict]:
         """List existing API-token credentials (no secrets returned)."""
