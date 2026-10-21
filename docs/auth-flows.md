@@ -23,7 +23,7 @@ methods handle this transparently:
 
 ```python
 c = FortiSIEMClient(host, "admin", "pw").login()
-cred = c.create_oauth_credential("automation")   # client_secret returned once
+cred = c.create_oauth_credential("automation")  # client_secret returned once
 c.revoke_oauth_credential(cred.id)
 ```
 

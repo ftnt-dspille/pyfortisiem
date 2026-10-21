@@ -25,9 +25,13 @@ FortiSIEM event retrieval is server-side asynchronous (submit query → poll pro
 import asyncio
 from pyfortisiem import AsyncFortiSIEMClient
 
+
 async def main():
     async with AsyncFortiSIEMClient.with_basic_auth(
-        "fortisiem.example.com:443", "admin", "pw", domain="Super",
+        "fortisiem.example.com:443",
+        "admin",
+        "pw",
+        domain="Super",
         max_concurrency=10,
     ) as fsm:
         # marquee: one incident + its triggering events, fetched concurrently
@@ -36,6 +40,7 @@ async def main():
 
         # bulk: list incidents and enrich each with events, bounded by the gate
         incs = await fsm.list_incidents_with_events(status=[0], size=50)
+
 
 asyncio.run(main())
 ```
@@ -46,9 +51,9 @@ asyncio.run(main())
 from pyfortisiem import FortiSIEMClient
 
 with FortiSIEMClient("fortisiem.example.com:443", "admin", "pw") as c:
-    lic = c.license_info()              # h5 session, logs in on first use
+    lic = c.license_info()  # h5 session, logs in on first use
     print(lic.serial, lic.type, lic.license_end, lic.days_left(), lic.is_valid())
-    print([(o.name, o.ok) for o in c.health_summary()])   # supervisor + collectors
+    print([(o.name, o.ok) for o in c.health_summary()])  # supervisor + collectors
 ```
 
 ## Auth modes
@@ -65,9 +70,9 @@ The h5 surface is CSRF-protected: every state-changing call must echo the `s` se
 from pyfortisiem import FortiSIEMClient
 
 c = FortiSIEMClient("fortisiem.example.com:443", "admin", "pw", domain="Super")
-cred = c.create_oauth_credential("automation")        # h5 / CSRF flow
+cred = c.create_oauth_credential("automation")  # h5 / CSRF flow
 token = c.mint_token(cred.client_id, cred.client_secret)
-print([t.name for t in c.mcp_list_tools(token)])      # OAuth bearer → MCP
+print([t.name for t in c.mcp_list_tools(token)])  # OAuth bearer → MCP
 ```
 
 ## MCP — FortiSIEM 8.0
