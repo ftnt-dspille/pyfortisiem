@@ -40,8 +40,10 @@ import time
 import httpx
 from pydantic import BaseModel
 
-from .exceptions import FortiSIEMMCPError
+from .exceptions import FortiSIEMError, FortiSIEMMCPError
 from .models import (
+    AIAnalysis,
+    AIKeyDetails,
     EntityContext,
     EntityContextQuery,
     EntityIncidentQuery,
@@ -61,6 +63,8 @@ from .models import (
     OAuthCredential,
     Reputation,
     RiskEntry,
+    TriageRun,
+    TriageStep,
     parse_risk_ranking,
 )
 
@@ -199,7 +203,7 @@ class FortiSIEMClient:
             raise RuntimeError("No 's' cookie on the session — login() again.")
         return {"s": s.encode().hex().upper()}
 
-    def _h5(self, method: str, path: str, *, json=None) -> httpx.Response:
+    def _h5(self, method: str, path: str, *, json=None, params=None) -> httpx.Response:
         assert self._session is not None
         headers = {
             **self._csrf_headers(),
@@ -208,9 +212,14 @@ class FortiSIEMClient:
             "Origin": self.base,
         }
         url = f"{self.h5}/{path.lstrip('/')}"
-        # cache-buster query param mirrors the GUI's ?t=<ms>
+        # cache-buster query param mirrors the GUI's ?t=<ms>. Pass query params via
+        # ``params``: httpx replaces a query string written into ``path``.
         return self._session.request(
-            method, url, headers=headers, json=json, params={"t": int(time.time() * 1000)}
+            method,
+            url,
+            headers=headers,
+            json=json,
+            params={**(params or {}), "t": int(time.time() * 1000)},
         )
 
     def license_info(self) -> LicenseInfo:
@@ -224,6 +233,180 @@ class FortiSIEMClient:
         r = self._h5("GET", "sec/license")
         r.raise_for_status()
         return LicenseInfo.model_validate(r.json())
+
+    # ---- FortiAI (GenAI) ---------------------------------------------------
+    #
+    # The incident FortiAI tab talks to a GenAI service under /phoenix/genai:
+    #   1. h5 POST sec/oauth/internal/token (grant_type=internal_user) -> bearer
+    #      (expires_in is in MINUTES, 15 on 7.6)
+    #   2. GET /phoenix/genai/api/create_websocket with that bearer -> {"ws_uri": "/ws/<id>"}
+    #   3. open wss://<host>/phoenix/genai/ws/<id>?src=incident_triage&org_id=1&user=<u>
+    #      (the id is the credential; the socket itself takes no auth header)
+    #   4. send {"question": "Triage incidents with ids: [N]", "optimize_triage": bool,
+    #      "triage_prompt"?: str}; read JSON frames until {"finished": true}
+    # Steps 1-3 reach the service without touching the LLM, so they make a free
+    # health probe; step 4 spends tokens on the configured key.
+
+    def ai_key_details(self) -> AIKeyDetails:
+        """Which LLM key FortiAI is configured with (the key itself comes back masked)."""
+        if self._session is None:
+            self.login()
+        r = self._h5("GET", "ai/getKeyDetails")
+        r.raise_for_status()
+        body = r.json()
+        # 7.6 returns the object JSON-encoded inside a JSON string.
+        return AIKeyDetails.model_validate(json.loads(body) if isinstance(body, str) else body)
+
+    def incident_ai_result(
+        self, incident_id: int, analysis_type: str = "AGENTIC"
+    ) -> AIAnalysis | None:
+        """The saved FortiAI analysis on an incident (``BASIC`` or ``AGENTIC``), or
+        None when nothing was saved (the endpoint answers 204)."""
+        if self._session is None:
+            self.login()
+        r = self._h5(
+            "GET", f"incident/airesult/{incident_id}", params={"analysisType": analysis_type}
+        )
+        r.raise_for_status()
+        if r.status_code == 204 or not r.content.strip():
+            return None
+        return AIAnalysis.model_validate({"analysisType": analysis_type, **r.json()})
+
+    def incident_planner_prompt(self, incident_id: int) -> str:
+        """The planner prompt the incident's FortiAI tab shows for Agentic mode
+        (set per rule). The story endpoint only answers for the incident's exact
+        first-seen time, so that is read from the incident list first."""
+        if self._session is None:
+            self.login()
+        r = self._h5(
+            "POST",
+            "incident/list",
+            json={"filters": {"incident": {"incidentId": [incident_id]}}, "start": 0, "size": 1},
+        )
+        r.raise_for_status()
+        listing = r.json()
+        rows = listing.get("lightValueObjects") or []
+        if not rows:
+            raise FortiSIEMError(f"incident {incident_id} not found")
+        values = dict(zip(listing["fields"], rows[0]["data"], strict=False))
+        r = self._h5(
+            "GET",
+            f"incidentStory/{incident_id}",
+            params={
+                "custId": rows[0].get("custId") or 1,
+                "firstSeenTime": values.get("origFirstSeenTime") or values["incidentFirstSeen"],
+                "withoutTicketId": "false",
+                "start": 0,
+                "size": 500,
+            },
+        )
+        r.raise_for_status()
+        story = r.json().get("data") or []
+        return next(
+            (i.get("plannerPrompt") or "" for i in story if i.get("incidentId") == incident_id), ""
+        )
+
+    def genai_token(self) -> str:
+        """A short-lived bearer for the GenAI service (h5 ``sec/oauth/internal/token``)."""
+        if self._session is None:
+            self.login()
+        assert self._session is not None
+        r = self._session.post(
+            f"{self.h5}/sec/oauth/internal/token",
+            content="grant_type=internal_user",
+            headers={
+                **self._csrf_headers(),
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Origin": self.base,
+            },
+        )
+        r.raise_for_status()
+        return r.json()["access_token"]
+
+    def genai_websocket_url(self, src: str = "incident_triage", org_id: int = 1) -> str:
+        """A fresh GenAI websocket URL. Reaching it proves the service is up
+        without calling the LLM."""
+        token = self.genai_token()  # logs in on first use
+        assert self._session is not None
+        r = self._session.get(
+            f"{self.phoenix}/genai/api/create_websocket",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        r.raise_for_status()
+        ws = self.base.replace("https://", "wss://", 1)
+        query = f"src={src}&org_id={org_id}&user={self.username}"
+        return f"{ws}/phoenix/genai{r.json()['ws_uri']}?{query}"
+
+    def genai_probe(self, timeout: float = 15) -> None:
+        """Open and close a GenAI websocket: raises if FortiAI's service is
+        unreachable. Spends no LLM tokens. Needs the ``genai`` extra."""
+        from websockets.sync.client import connect
+
+        with connect(self.genai_websocket_url(), ssl=self._ws_ssl(), open_timeout=timeout):
+            pass
+
+    def triage_incident(
+        self,
+        incident_id: int,
+        *,
+        prompt: str | None = None,
+        optimize: bool = True,
+        timeout: float = 900,
+        on_message=None,
+    ) -> TriageRun:
+        """Run the incident FortiAI tab's **Agentic** triage and wait for it to end.
+
+        ``prompt`` is the planner prompt; None uses the incident rule's own (what
+        the tab shows, via :meth:`incident_planner_prompt`). The service needs a
+        prompt: sent without one, its planner answers "your plan includes a step I
+        can't execute" and finishes. ``on_message(frame: dict)`` sees every streamed frame.
+        Spends LLM tokens. The result is not saved to the incident; the GUI's
+        Save button does that. Needs the ``genai`` extra.
+        """
+        from websockets.sync.client import connect
+
+        run = TriageRun()
+        payload: dict = {
+            "question": f"Triage incidents with ids: [{incident_id}]",
+            "optimize_triage": optimize,
+        }
+        prompt = prompt or self.incident_planner_prompt(incident_id)
+        if prompt:
+            payload["triage_prompt"] = prompt
+        deadline = time.monotonic() + timeout
+        with connect(self.genai_websocket_url(), ssl=self._ws_ssl(), open_timeout=30) as ws:
+            ws.send(json.dumps(payload))
+            while not run.finished:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    raise TimeoutError(
+                        f"FortiAI triage of incident {incident_id} still running after {timeout}s"
+                    )
+                frame = json.loads(ws.recv(timeout=left))
+                if on_message:
+                    on_message(frame)
+                run.ws_id = frame.get("ws_id") or run.ws_id
+                msg = frame.get("message") or ""
+                if frame.get("steps"):
+                    run.steps = [TriageStep.model_validate(s) for s in frame["steps"]]
+                elif msg:
+                    run.messages.append(msg)
+                    if "Incident Triage Summary" in msg:
+                        run.summary = msg.strip()
+                    m = re.search(r"fileName=([^)\s]+\.pdf)", msg)
+                    if m:
+                        run.report = m.group(1)
+                run.finished = bool(frame.get("finished"))
+        return run
+
+    def _ws_ssl(self):
+        import ssl
+
+        ctx = ssl.create_default_context()
+        if not self._verify:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        return ctx
 
     def list_oauth_credentials(self) -> list[dict]:
         """List existing API-token credentials (no secrets returned)."""

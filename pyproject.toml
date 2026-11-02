@@ -35,8 +35,13 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7.0",
+    "websockets>=13",
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.0",
+]
+# FortiAI agentic triage + probe over the GenAI websocket
+genai = [
+    "websockets>=13",
 ]
 typecheck = [
     "mypy>=1.13",
