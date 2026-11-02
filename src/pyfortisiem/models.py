@@ -542,3 +542,65 @@ class HealthOrg(_RawModel):
     @property
     def ok(self) -> bool:
         return self.health_status == "Normal" and all(n.status == "Normal" for n in self.nodes)
+
+
+# ---- FortiAI (GenAI) --------------------------------------------------------
+
+
+class AIKeyDetails(_RawModel):
+    """The LLM key FortiAI uses (ADMIN -> Settings -> FortiAI; h5 ``ai/getKeyDetails``).
+
+    On 7.6 FortiAI runs on a key the admin supplies (OpenAI or Azure OpenAI); the
+    license carries no FortiAI line. The key itself is never returned, only a mask.
+    """
+
+    key_type: str | None = None  # "openai", "azure", ...
+    azure_ai_resource_name: str | None = None
+    api_key: str | None = None  # "********" when set
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.key_type and self.api_key)
+
+
+class AIAnalysis(_RawModel):
+    """A saved FortiAI analysis on an incident (h5 ``incident/airesult/<id>``).
+
+    Saved only when someone clicks Save on the incident's FortiAI tab; kept 30 days.
+    """
+
+    result: str = ""
+    analysis_type: str | None = Field(default=None, alias="analysisType")
+    owner_id: int | None = Field(default=None, alias="ownerId")
+    creation_time_ms: int | None = Field(default=None, alias="creationTime")
+    last_modified_ms: int | None = Field(default=None, alias="lastModified")
+
+    @property
+    def last_modified(self) -> datetime | None:
+        return _ms_to_dt(self.last_modified_ms or self.creation_time_ms)
+
+
+class TriageStep(_RawModel):
+    title: str = ""
+    status: str | None = None  # "Pending", "In Progress", "Completed", ...
+    msg: str | None = None
+
+
+class TriageRun(_RawModel):
+    """One agentic triage run, as streamed over the FortiAI websocket.
+
+    ``messages`` holds every streamed ``message`` in order; ``summary`` is the
+    final "Incident Triage Summary" block; ``report`` is the PDF file name the
+    run produced (fetch it from ``/phoenix/genCustomizeReport?fileName=...``).
+    """
+
+    ws_id: str | None = None
+    finished: bool = False
+    messages: list[str] = Field(default_factory=list)
+    steps: list[TriageStep] = Field(default_factory=list)
+    summary: str = ""
+    report: str | None = None
+
+    @property
+    def text(self) -> str:
+        return "".join(self.messages)
